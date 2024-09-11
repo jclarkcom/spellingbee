@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spelling Bee Clone</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .game-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            width: 300px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .hexagon-container {
+            position: relative;
+            width: 180px;
+            height: 156px;
+            margin: 0 auto 20px;
+        }
+        .hexagon {
+            position: absolute;
+            width: 60px;
+            height: 52px;
+            background-color: #e6e6e6;
+            clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .hexagon:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 1;
+            opacity: 0.8;
+
+        }
+        .hexagon.center {
+            background-color: #f7da21;
+        }
+        .hexagon.center:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(247, 218, 33, 0.6);
+            opacity: 0.8;
+        }
+        .input-container {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        #word-input {
+            flex-grow: 1;
+            padding: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 5px 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #message {
+            margin-top: 10px;
+            color: #d32f2f;
+        }
+        #progress-container {
+            margin-top: 20px;
+        }
+        #progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #progress {
+            height: 100%;
+            background-color: #4caf50;
+            width: 0%;
+            transition: width 0.5s ease-in-out;
+        }
+        #found-words {
+            margin-top: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Spelling Bee Clone</h1>
+        <div id="loading">Loading game...</div>
+        <div id="game" style="display: none;">
+            <div class="hexagon-container" id="hexagon-container"></div>
+            <div class="input-container">
+                <input type="text" id="word-input" placeholder="Enter word">
+                <button id="submit-btn">Enter</button>
+            </div>
+            <button id="delete-btn">Delete</button>
+            <div id="message"></div>
+            <div id="score">Score: 0</div>
+            <div id="progress-container">
+                Progress: <span id="progress-text">0 / 0</span>
+                <div id="progress-bar">
+                    <div id="progress"></div>
+                </div>
+            </div>
+            <div id="found-words">
+                <h3>Found Words:</h3>
+                <ul id="word-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const centerLetter = 'H';
+        const outerLetters = ['E', 'I', 'D', 'K', 'L', 'C'];
+        let validWords = [];
+        let foundWords = [];
+        let score = 0;
+
+        const hexagonCoordinates = [
+            [60, 52],   // Center (H)
+            [12, 27],   // E
+            [60, -2],   // I
+            [107, 26],  // D
+            [107, 80],  // K
+            [60, 106],  // L
+            [13, 81]    // C
+        ];
+
+        async function fetchWordList() {
+            try {
+                const response = await fetch('https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt');
+                const text = await response.text();
+                return text.split('\n').map(word => word.toUpperCase());
+            } catch (error) {
+                console.error('Error fetching word list:', error);
+                return [];
+            }
+        }
+
+        function filterWords(words) {
+            const gameLetters = [centerLetter, ...outerLetters];
+            return words.filter(word => 
+                word.length >= 4 &&
+                word.includes(centerLetter) &&
+                word.split('').every(letter => gameLetters.includes(letter))
+            );
+        }
+
+        function createHexagons() {
+            const container = document.getElementById('hexagon-container');
+            [centerLetter, ...outerLetters].forEach((letter, index) => {
+                const hexagon = document.createElement('div');
+                hexagon.className = `hexagon ${index === 0 ? 'center' : ''}`;
+                hexagon.textContent = letter;
+                hexagon.onclick = () => addLetter(letter);
+                
+                const [x, y] = hexagonCoordinates[index];
+                hexagon.style.left = `${x}px`;
+                hexagon.style.top = `${y}px`;
+                
+                container.appendChild(hexagon);
+            });
+        }
+
+        function addLetter(letter) {
+            const input = document.getElementById('word-input');
+            input.value += letter;
+        }
+
+        function deleteLetter() {
+            const input = document.getElementById('word-input');
+            input.value = input.value.slice(0, -1);
+        }
+
+        function submitWord() {
+            const input = document.getElementById('word-input');
+            const word = input.value.toUpperCase();
+            const messageElement = document.getElementById('message');
+
+            if (word.length < 4) {
+                messageElement.textContent = 'Word must be at least 4 letters long.';
+            } else if (!word.includes(centerLetter)) {
+                messageElement.textContent = 'Word must include the center letter.';
+            } else if (foundWords.includes(word)) {
+                messageElement.textContent = 'Word already found.';
+            } else if (!validWords.includes(word)) {
+                messageElement.textContent = 'Not a valid word for this puzzle.';
+            } else {
+                foundWords.push(word);
+                score += word.length;
+                updateScore();
+                updateProgress();
+                updateFoundWords();
+                messageElement.textContent = 'Word found!';
+                input.value = '';
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('score').textContent = `Score: ${score}`;
+        }
+
+        function updateProgress() {
+            const progressText = document.getElementById('progress-text');
+            const progressBar = document.getElementById('progress');
+            const progress = (foundWords.length / validWords.length) * 100;
+            progressText.textContent = `${foundWords.length} / ${validWords.length}`;
+            progressBar.style.width = `${progress}%`;
+        }
+
+        function updateFoundWords() {
+            const wordList = document.getElementById('word-list');
+            wordList.innerHTML = '';
+            foundWords.forEach(word => {
+                const li = document.createElement('li');
+                li.textContent = word;
+                wordList.appendChild(li);
+            });
+        }
+
+        async function initializeGame() {
+            const allWords = await fetchWordList();
+            validWords = filterWords(allWords);
+            createHexagons();
+            updateProgress();
+
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+        }
+
+        document.getElementById('submit-btn').onclick = submitWord;
+        document.getElementById('delete-btn').onclick = deleteLetter;
+        document.getElementById('word-input').onkeypress = (e) => {
+            if (e.key === 'Enter') submitWord();
+        };
+
+        initializeGame();
+    </script>
+</body>
+</html>
